@@ -3,26 +3,21 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-
 const API_BASE_URL =
   "https://08m2whbesa.execute-api.us-east-1.amazonaws.com";
-
 
 type Device = {
   device_id?: string;
   cart_id?: string | null;
   course_id?: string | null;
   status?: string;
-  imei?: string | null;
-  iccid?: string | null;
 };
-
 
 type Course = {
   course_id: string;
   name: string;
+  pinvision_club_id?: string | null;
 };
-
 
 type Cart = {
   cart_id: string;
@@ -31,70 +26,36 @@ type Cart = {
   available: boolean;
 };
 
-
 export default function ProvisioningPage() {
   const searchParams = useSearchParams();
 
   const deviceId = searchParams.get("device_id");
 
-  const [device, setDevice] =
-    useState<Device | null>(null);
+  const [device, setDevice] = useState<Device | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [carts, setCarts] = useState<Cart[]>([]);
 
-  const [courses, setCourses] =
-    useState<Course[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState("");
+  const [selectedCart, setSelectedCart] = useState("");
+  const [installerName, setInstallerName] = useState("");
 
-  const [carts, setCarts] =
-    useState<Cart[]>([]);
+  const [loadingDevice, setLoadingDevice] = useState(true);
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [loadingCarts, setLoadingCarts] = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
+  const [deviceError, setDeviceError] = useState("");
+  const [coursesError, setCoursesError] = useState("");
+  const [cartsError, setCartsError] = useState("");
+  const [assignError, setAssignError] = useState("");
 
-  const [imei, setImei] = useState("");
-  const [iccid, setIccid] = useState("");
-
-  const [selectedCourse, setSelectedCourse] =
-    useState("");
-
-  const [selectedCart, setSelectedCart] =
-    useState("");
-
-  const [installerName, setInstallerName] =
-    useState("");
-
-
-  const [loadingDevice, setLoadingDevice] =
-    useState(true);
-
-  const [loadingCourses, setLoadingCourses] =
-    useState(true);
-
-  const [loadingCarts, setLoadingCarts] =
-    useState(false);
-
-  const [assigning, setAssigning] =
-    useState(false);
-
-
-  const [deviceError, setDeviceError] =
-    useState("");
-
-  const [coursesError, setCoursesError] =
-    useState("");
-
-  const [cartsError, setCartsError] =
-    useState("");
-
-  const [assignError, setAssignError] =
-    useState("");
-
-  const [successMessage, setSuccessMessage] =
-    useState("");
-
+  const [successMessage, setSuccessMessage] = useState("");
 
   /*
    * =========================================================
    * CARGAR DISPOSITIVO
    * =========================================================
    */
-
   async function loadDevice() {
     if (!deviceId) {
       setLoadingDevice(false);
@@ -117,40 +78,30 @@ export default function ProvisioningPage() {
 
       const data = await response.json();
 
+      console.log("GET device:");
+      console.log(data);
+
       setDevice(data);
-
-      /*
-       * Si el dispositivo ya tenía IMEI o ICCID,
-       * los mostramos en el formulario.
-       */
-
-      setImei(data.imei ?? "");
-      setIccid(data.iccid ?? "");
-
     } catch (error) {
       console.error(error);
 
       setDeviceError(
         "No se ha podido obtener el dispositivo."
       );
-
     } finally {
       setLoadingDevice(false);
     }
   }
 
-
   useEffect(() => {
     loadDevice();
   }, [deviceId]);
 
-
   /*
    * =========================================================
-   * CARGAR CAMPOS
+   * CARGAR COURSES
    * =========================================================
    */
-
   useEffect(() => {
     async function loadCourses() {
       try {
@@ -169,17 +120,16 @@ export default function ProvisioningPage() {
 
         const data = await response.json();
 
-        setCourses(
-          data.courses ?? []
-        );
+        console.log("GET courses:");
+        console.log(data);
 
+        setCourses(data.courses ?? []);
       } catch (error) {
         console.error(error);
 
         setCoursesError(
           "No se han podido obtener los campos de golf."
         );
-
       } finally {
         setLoadingCourses(false);
       }
@@ -188,13 +138,11 @@ export default function ProvisioningPage() {
     loadCourses();
   }, []);
 
-
   /*
    * =========================================================
-   * CARGAR CARRITOS
+   * CARGAR CARTS DEL COURSE SELECCIONADO
    * =========================================================
    */
-
   useEffect(() => {
     async function loadCarts() {
       if (!selectedCourse) {
@@ -220,10 +168,10 @@ export default function ProvisioningPage() {
 
         const data = await response.json();
 
-        setCarts(
-          data.carts ?? []
-        );
+        console.log("GET carts:");
+        console.log(data);
 
+        setCarts(data.carts ?? []);
       } catch (error) {
         console.error(error);
 
@@ -232,39 +180,34 @@ export default function ProvisioningPage() {
         );
 
         setCarts([]);
-
       } finally {
         setLoadingCarts(false);
       }
     }
 
     loadCarts();
-
   }, [selectedCourse]);
 
-
+  /*
+   * SOLO CARTS DISPONIBLES
+   */
   const availableCarts = carts.filter(
     (cart) => cart.available
   );
 
-
-  const selectedCourseData =
-    courses.find(
-      (course) =>
-        course.course_id === selectedCourse
-    );
-
+  const selectedCourseData = courses.find(
+    (course) =>
+      course.course_id === selectedCourse
+  );
 
   /*
    * =========================================================
-   * GUARDAR ALTA MT700
+   * ASIGNAR DEVICE
    * =========================================================
    */
-
   async function handleAssign() {
     setAssignError("");
     setSuccessMessage("");
-
 
     if (!deviceId) {
       setAssignError(
@@ -273,38 +216,12 @@ export default function ProvisioningPage() {
       return;
     }
 
-
-    /*
-     * IMEI obligatorio.
-     * Normalmente son 15 dígitos.
-     */
-
-    const cleanImei =
-      imei.replace(/\s/g, "");
-
-    if (!cleanImei) {
-      setAssignError(
-        "Introduce el IMEI del MT700."
-      );
-      return;
-    }
-
-
-    if (!/^\d{15}$/.test(cleanImei)) {
-      setAssignError(
-        "El IMEI debe contener 15 dígitos."
-      );
-      return;
-    }
-
-
     if (!selectedCourse) {
       setAssignError(
         "Selecciona un campo de golf."
       );
       return;
     }
-
 
     if (!selectedCart) {
       setAssignError(
@@ -313,7 +230,6 @@ export default function ProvisioningPage() {
       return;
     }
 
-
     if (!installerName.trim()) {
       setAssignError(
         "Introduce el nombre del instalador."
@@ -321,39 +237,18 @@ export default function ProvisioningPage() {
       return;
     }
 
-
     const payload = {
-      imei: cleanImei,
-
-      /*
-       * ICCID es opcional.
-       * Si está vacío mandamos null.
-       */
-      iccid:
-        iccid.trim() || null,
-
-      course_id:
-        selectedCourse,
-
-      cart_id:
-        selectedCart,
-
-      changed_by:
-        installerName.trim(),
-
-      reason:
-        "MT700 pilot QR provisioning",
+      course_id: selectedCourse,
+      cart_id: selectedCart,
+      changed_by: installerName.trim(),
+      reason: "QR provisioning",
     };
-
 
     try {
       setAssigning(true);
 
-      console.log(
-        "POST MT700 provisioning:",
-        payload
-      );
-
+      console.log("POST assign:");
+      console.log(payload);
 
       const response = await fetch(
         `${API_BASE_URL}/devices/${deviceId}/assign`,
@@ -361,186 +256,163 @@ export default function ProvisioningPage() {
           method: "POST",
 
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
 
-          body:
-            JSON.stringify(payload),
+          body: JSON.stringify(payload),
         }
       );
 
-
       if (!response.ok) {
         let message =
-          `Error ${response.status} al guardar el dispositivo.`;
+          `Error ${response.status} al realizar la asignación.`;
 
         try {
-          const errorData =
-            await response.json();
+          const errorData = await response.json();
 
           message =
             errorData.message ??
             errorData.error ??
             message;
-
         } catch {
-          // usamos mensaje por defecto
+          // usamos el mensaje por defecto
         }
 
         throw new Error(message);
       }
 
+      let responseData = null;
+
+      try {
+        responseData = await response.json();
+      } catch {
+        // puede devolver 204 o body vacío
+      }
+
+      console.log("POST assign response:");
+      console.log(responseData);
 
       setSuccessMessage(
-        `El MT700 ${deviceId} se ha dado de alta correctamente y se ha asignado a ${selectedCart} en ${
-          selectedCourseData?.name ??
-          selectedCourse
+        `El dispositivo ${deviceId} se ha asignado correctamente a ${selectedCart} en ${
+          selectedCourseData?.name ?? selectedCourse
         }.`
       );
 
-
       /*
-       * Recargar dispositivo para comprobar
-       * que Aurora tiene los nuevos datos.
+       * Volvemos a leer el dispositivo para comprobar
+       * que la asignación quedó persistida en Aurora.
        */
-
       await loadDevice();
 
-
       /*
-       * Actualizar listado de carritos disponibles.
+       * Volvemos a cargar carts porque el que acabamos
+       * de ocupar ya debería dejar de estar disponible.
        */
-
-      const cartsResponse =
-        await fetch(
-          `${API_BASE_URL}/courses/${selectedCourse}/carts`
-        );
+      const cartsResponse = await fetch(
+        `${API_BASE_URL}/courses/${selectedCourse}/carts`
+      );
 
       if (cartsResponse.ok) {
-        const cartsData =
-          await cartsResponse.json();
+        const cartsData = await cartsResponse.json();
 
-        setCarts(
-          cartsData.carts ?? []
-        );
+        setCarts(cartsData.carts ?? []);
       }
 
-
       setSelectedCart("");
-
     } catch (error) {
       console.error(error);
 
       if (error instanceof Error) {
-        setAssignError(
-          error.message
-        );
-
+        setAssignError(error.message);
       } else {
         setAssignError(
-          "Ha ocurrido un error al guardar el dispositivo."
+          "Ha ocurrido un error al realizar la asignación."
         );
       }
-
     } finally {
       setAssigning(false);
     }
   }
 
-
   /*
    * =========================================================
-   * SIN DEVICE ID
+   * SIN DEVICE_ID
    * =========================================================
    */
-
   if (!deviceId) {
     return (
       <main className="min-h-screen bg-[#edf1ea] px-4 py-10">
-
         <div className="mx-auto max-w-xl rounded-3xl bg-white p-8 shadow-sm">
 
           <h1 className="text-2xl font-bold text-[#1d2a24]">
-            Courserev
+            CartTracker
           </h1>
 
           <p className="mt-6 font-medium text-red-600">
-            No se ha detectado ningún tracker.
+            No se ha detectado ningún dispositivo.
           </p>
 
           <p className="mt-2 text-sm text-gray-500">
-            Abre esta página utilizando el QR del MT700.
+            Abre esta página utilizando el QR de instalación.
           </p>
 
         </div>
-
       </main>
     );
   }
-
 
   return (
     <main className="min-h-screen bg-[#edf1ea] px-4 py-8">
 
       <div className="mx-auto max-w-2xl">
 
-
         {/* HEADER */}
 
-        <header className="mb-6 px-2">
+        <header className="mb-6 flex items-center justify-between px-2">
 
           <div className="flex items-center gap-3">
 
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#32634f] text-sm font-bold text-white">
-              CR
+              CT
             </div>
 
             <div>
-
               <h1 className="text-xl font-bold text-[#202b27]">
-                Courserev
+                CartTracker
               </h1>
 
               <p className="text-sm text-gray-500">
-                MT700 Pilot Provisioning
+                Device Provisioning
               </p>
-
             </div>
 
           </div>
 
         </header>
 
+        {/* CARD PRINCIPAL */}
 
         <section className="rounded-[28px] bg-[#fafbf8] p-6 shadow-sm sm:p-10">
 
-
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#477963]">
-            MT700 Pilot
+            Instalación
           </p>
-
 
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#202824]">
-            Dar de alta GPS
+            Asignar GPS a carrito
           </h2>
 
-
           <p className="mt-3 text-sm leading-6 text-gray-500">
-            El tracker se ha identificado mediante el QR.
-            Introduce los datos físicos del MT700 y selecciona
-            el carrito donde se instalará.
+            El dispositivo ha sido identificado mediante el QR.
           </p>
 
-
-          {/* TRACKER */}
+          {/* DEVICE */}
 
           <div className="mt-8 rounded-2xl border border-[#dfe6dc] bg-white p-5">
 
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-              Tracker
+              Dispositivo detectado
             </p>
-
 
             {loadingDevice && (
               <p className="mt-4 text-sm text-gray-500">
@@ -548,138 +420,79 @@ export default function ProvisioningPage() {
               </p>
             )}
 
-
             {deviceError && (
-              <p className="mt-4 text-sm text-red-600">
-                {deviceError}
-              </p>
+              <div className="mt-4 rounded-xl bg-red-50 p-4">
+
+                <p className="font-medium text-red-700">
+                  Error
+                </p>
+
+                <p className="mt-1 text-sm text-red-600">
+                  {deviceError}
+                </p>
+
+              </div>
             )}
 
+            {!loadingDevice && !deviceError && (
+              <div className="mt-4 grid gap-5 sm:grid-cols-3">
 
-            {!loadingDevice &&
-              !deviceError && (
+                <div>
+                  <p className="text-xs uppercase text-gray-400">
+                    GPS
+                  </p>
 
-                <div className="mt-4 grid gap-5 sm:grid-cols-3">
-
-                  <div>
-
-                    <p className="text-xs uppercase text-gray-400">
-                      Tracker ID
-                    </p>
-
-                    <p className="mt-1 font-bold text-[#202824]">
-                      {device?.device_id ??
-                        deviceId}
-                    </p>
-
-                  </div>
-
-
-                  <div>
-
-                    <p className="text-xs uppercase text-gray-400">
-                      Carrito actual
-                    </p>
-
-                    <p className="mt-1 font-semibold text-[#202824]">
-                      {device?.cart_id ??
-                        "Sin asignar"}
-                    </p>
-
-                  </div>
-
-
-                  <div>
-
-                    <p className="text-xs uppercase text-gray-400">
-                      Estado
-                    </p>
-
-                    <p className="mt-1 font-semibold text-[#202824]">
-                      {device?.status ??
-                        "registered"}
-                    </p>
-
-                  </div>
-
+                  <p className="mt-1 font-bold text-[#202824]">
+                    {device?.device_id ?? deviceId}
+                  </p>
                 </div>
-              )}
+
+                <div>
+                  <p className="text-xs uppercase text-gray-400">
+                    Carrito actual
+                  </p>
+
+                  <p className="mt-1 font-semibold text-[#202824]">
+                    {device?.cart_id ?? "Sin asignar"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase text-gray-400">
+                    Campo actual
+                  </p>
+
+                  <p className="mt-1 font-semibold text-[#202824]">
+                    {device?.course_id ?? "Sin asignar"}
+                  </p>
+                </div>
+
+              </div>
+            )}
 
           </div>
-
-
-          {/* IMEI */}
-
-          <div className="mt-8">
-
-            <label className="font-semibold text-[#202824]">
-              IMEI *
-            </label>
-
-            <p className="mt-1 text-xs text-gray-400">
-              IMEI de 15 dígitos del MT700.
-            </p>
-
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={15}
-              value={imei}
-              onChange={(event) => {
-                setImei(
-                  event.target.value.replace(
-                    /\D/g,
-                    ""
-                  )
-                );
-
-                setAssignError("");
-              }}
-              disabled={assigning}
-              placeholder="862255061947757"
-              className="mt-3 w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c] outline-none focus:border-[#32634f]"
-            />
-
-          </div>
-
-
-          {/* ICCID */}
-
-          <div className="mt-7">
-
-            <label className="font-semibold text-[#202824]">
-              ICCID
-            </label>
-
-            <p className="mt-1 text-xs text-gray-400">
-              Opcional. Identificador de la SIM.
-            </p>
-
-            <input
-              type="text"
-              value={iccid}
-              onChange={(event) => {
-                setIccid(
-                  event.target.value.trim()
-                );
-
-                setAssignError("");
-              }}
-              disabled={assigning}
-              placeholder="Opcional"
-              className="mt-3 w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c] outline-none focus:border-[#32634f]"
-            />
-
-          </div>
-
 
           {/* COURSE */}
 
-          <div className="mt-7">
+          <div className="mt-8">
 
-            <label className="font-semibold text-[#202824]">
-              Campo de golf *
-            </label>
+            <div className="mb-3 flex items-center gap-3">
+
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e5eee8] text-sm font-bold text-[#32634f]">
+                1
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-[#202824]">
+                  Campo de golf
+                </h3>
+
+                <p className="text-xs text-gray-400">
+                  Selecciona el campo donde se instalará el dispositivo.
+                </p>
+              </div>
+
+            </div>
 
             <select
               value={selectedCourse}
@@ -690,13 +503,14 @@ export default function ProvisioningPage() {
 
                 setSelectedCart("");
                 setAssignError("");
+                setSuccessMessage("");
               }}
               disabled={
                 loadingCourses ||
                 !!coursesError ||
                 assigning
               }
-              className="mt-3 w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c]"
+              className="w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c] outline-none focus:border-[#32634f] disabled:bg-gray-100 disabled:text-gray-400"
             >
 
               <option value="">
@@ -705,35 +519,46 @@ export default function ProvisioningPage() {
                   : "Selecciona un campo"}
               </option>
 
-              {courses.map(
-                (course) => (
-
-                  <option
-                    key={
-                      course.course_id
-                    }
-                    value={
-                      course.course_id
-                    }
-                  >
-                    {course.name}
-                  </option>
-
-                )
-              )}
+              {courses.map((course) => (
+                <option
+                  key={course.course_id}
+                  value={course.course_id}
+                >
+                  {course.name} · {course.course_id}
+                </option>
+              ))}
 
             </select>
 
-          </div>
+            {coursesError && (
+              <p className="mt-2 text-sm text-red-600">
+                {coursesError}
+              </p>
+            )}
 
+          </div>
 
           {/* CART */}
 
           <div className="mt-7">
 
-            <label className="font-semibold text-[#202824]">
-              Carrito *
-            </label>
+            <div className="mb-3 flex items-center gap-3">
+
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e5eee8] text-sm font-bold text-[#32634f]">
+                2
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-[#202824]">
+                  Carrito
+                </h3>
+
+                <p className="text-xs text-gray-400">
+                  Solo se muestran carritos que no tienen un GPS asignado.
+                </p>
+              </div>
+
+            </div>
 
             <select
               value={selectedCart}
@@ -743,13 +568,15 @@ export default function ProvisioningPage() {
                 );
 
                 setAssignError("");
+                setSuccessMessage("");
               }}
               disabled={
                 !selectedCourse ||
                 loadingCarts ||
+                availableCarts.length === 0 ||
                 assigning
               }
-              className="mt-3 w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c]"
+              className="w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c] outline-none focus:border-[#32634f] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
             >
 
               <option value="">
@@ -757,35 +584,68 @@ export default function ProvisioningPage() {
                   ? "Selecciona primero un campo"
                   : loadingCarts
                   ? "Cargando carritos..."
-                  : "Selecciona un carrito"}
+                  : availableCarts.length === 0
+                  ? "No hay carritos disponibles"
+                  : "Selecciona un carrito libre"}
               </option>
 
-
-              {availableCarts.map(
-                (cart) => (
-
-                  <option
-                    key={cart.cart_id}
-                    value={cart.cart_id}
-                  >
-                    {cart.cart_id}
-                  </option>
-
-                )
-              )}
+              {availableCarts.map((cart) => (
+                <option
+                  key={cart.cart_id}
+                  value={cart.cart_id}
+                >
+                  {cart.cart_id}
+                </option>
+              ))}
 
             </select>
 
-          </div>
+            {cartsError && (
+              <p className="mt-2 text-sm text-red-600">
+                {cartsError}
+              </p>
+            )}
 
+            {!loadingCarts &&
+              selectedCourse &&
+              !cartsError &&
+              availableCarts.length === 0 && (
+                <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+
+                  <p className="font-semibold text-amber-800">
+                    No hay carritos libres
+                  </p>
+
+                  <p className="mt-1 text-sm text-amber-700">
+                    Todos los carritos de este campo tienen actualmente un dispositivo asignado.
+                  </p>
+
+                </div>
+              )}
+
+          </div>
 
           {/* INSTALLER */}
 
           <div className="mt-7">
 
-            <label className="font-semibold text-[#202824]">
-              Instalador *
-            </label>
+            <div className="mb-3 flex items-center gap-3">
+
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e5eee8] text-sm font-bold text-[#32634f]">
+                3
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-[#202824]">
+                  Instalador
+                </h3>
+
+                <p className="text-xs text-gray-400">
+                  Introduce quién realiza la instalación.
+                </p>
+              </div>
+
+            </div>
 
             <input
               type="text"
@@ -799,20 +659,18 @@ export default function ProvisioningPage() {
               }}
               disabled={assigning}
               placeholder="Nombre del instalador"
-              className="mt-3 w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c]"
+              className="w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c] outline-none focus:border-[#32634f] disabled:bg-gray-100"
             />
 
           </div>
 
-
           {/* ERROR */}
 
           {assignError && (
-
             <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5">
 
               <p className="font-semibold text-red-700">
-                No se ha podido completar el alta
+                No se ha podido realizar la asignación
               </p>
 
               <p className="mt-1 text-sm text-red-600">
@@ -822,24 +680,31 @@ export default function ProvisioningPage() {
             </div>
           )}
 
-
           {/* SUCCESS */}
 
           {successMessage && (
-
             <div className="mt-8 rounded-2xl border border-green-200 bg-green-50 p-5">
 
-              <p className="font-bold text-green-800">
-                ✓ Alta completada
-              </p>
+              <div className="flex items-start gap-3">
 
-              <p className="mt-1 text-sm text-green-700">
-                {successMessage}
-              </p>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-600 font-bold text-white">
+                  ✓
+                </div>
+
+                <div>
+                  <p className="font-bold text-green-800">
+                    Asignación completada
+                  </p>
+
+                  <p className="mt-1 text-sm leading-6 text-green-700">
+                    {successMessage}
+                  </p>
+                </div>
+
+              </div>
 
             </div>
           )}
-
 
           {/* BUTTON */}
 
@@ -849,7 +714,6 @@ export default function ProvisioningPage() {
               assigning ||
               loadingDevice ||
               !!deviceError ||
-              !imei ||
               !selectedCourse ||
               !selectedCart ||
               !installerName.trim()
@@ -858,8 +722,8 @@ export default function ProvisioningPage() {
           >
 
             {assigning
-              ? "Guardando..."
-              : "Confirmar alta MT700"}
+              ? "Guardando asignación..."
+              : "Confirmar asignación"}
 
           </button>
 
