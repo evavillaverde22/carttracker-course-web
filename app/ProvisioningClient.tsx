@@ -34,6 +34,19 @@ type Cart = {
 };
 
 
+type Sim = {
+  iccid: string;
+  status: string;
+  assigned_device_id: string | null;
+  created_at?: string | null;
+};
+
+
+type SimMode =
+  | "known"
+  | "new";
+
+
 export default function ProvisioningPage() {
   const searchParams = useSearchParams();
 
@@ -58,7 +71,16 @@ export default function ProvisioningPage() {
   const [imei, setImei] =
     useState("");
 
-  const [iccid, setIccid] =
+  const [sims, setSims] =
+    useState<Sim[]>([]);
+
+  const [simMode, setSimMode] =
+    useState<SimMode>("known");
+
+  const [selectedSim, setSelectedSim] =
+    useState("");
+
+  const [newIccid, setNewIccid] =
     useState("");
 
   const [selectedCourse, setSelectedCourse] =
@@ -80,6 +102,9 @@ export default function ProvisioningPage() {
   const [loadingCarts, setLoadingCarts] =
     useState(false);
 
+  const [loadingSims, setLoadingSims] =
+    useState(true);
+
   const [assigning, setAssigning] =
     useState(false);
 
@@ -91,6 +116,9 @@ export default function ProvisioningPage() {
     useState("");
 
   const [cartsError, setCartsError] =
+    useState("");
+
+  const [simsError, setSimsError] =
     useState("");
 
   const [assignError, setAssignError] =
@@ -140,9 +168,11 @@ export default function ProvisioningPage() {
         data.imei ?? ""
       );
 
-      setIccid(
-        data.iccid ?? ""
-      );
+      if (data.iccid) {
+        setSimMode("known");
+        setSelectedSim(data.iccid);
+        setNewIccid("");
+      }
 
     } catch (error) {
       console.error(
@@ -163,6 +193,55 @@ export default function ProvisioningPage() {
   useEffect(() => {
     loadDevice();
   }, [deviceId]);
+
+
+  // =====================================================
+  // CARGAR SIMS DISPONIBLES
+  // =====================================================
+
+  async function loadAvailableSims() {
+    try {
+      setLoadingSims(true);
+      setSimsError("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/sims/available`
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Error ${response.status}: ${response.statusText}`
+        );
+      }
+
+      const data =
+        await response.json();
+
+      setSims(
+        data.sims ?? []
+      );
+
+    } catch (error) {
+      console.error(
+        "Error cargando SIMs:",
+        error
+      );
+
+      setSimsError(
+        "No se han podido obtener las SIMs disponibles."
+      );
+
+      setSims([]);
+
+    } finally {
+      setLoadingSims(false);
+    }
+  }
+
+
+  useEffect(() => {
+    loadAvailableSims();
+  }, []);
 
 
   // =====================================================
@@ -288,6 +367,40 @@ export default function ProvisioningPage() {
     );
 
 
+  const currentDeviceIccid =
+    device?.iccid ?? "";
+
+
+  const selectableSims = [
+    ...(currentDeviceIccid
+      ? [{
+          iccid: currentDeviceIccid,
+          status: "assigned",
+          assigned_device_id:
+            deviceId,
+        }]
+      : []),
+
+    ...sims.filter(
+      (sim) =>
+        sim.iccid !==
+        currentDeviceIccid
+    ),
+  ];
+
+
+  const finalIccid =
+    simMode === "known"
+      ? selectedSim.trim()
+      : newIccid.trim();
+
+
+  const validIccid =
+    /^\d{18,22}$/.test(
+      finalIccid
+    );
+
+
   // =====================================================
   // GUARDAR PROVISIONING
   // =====================================================
@@ -328,6 +441,41 @@ export default function ProvisioningPage() {
     ) {
       setAssignError(
         "El IMEI debe contener exactamente 15 dígitos."
+      );
+
+      return;
+    }
+
+
+    // ---------------------------------------------------
+    // ICCID
+    // ---------------------------------------------------
+
+    const cleanIccid =
+      finalIccid.replace(
+        /\D/g,
+        ""
+      );
+
+
+    if (!cleanIccid) {
+      setAssignError(
+        simMode === "known"
+          ? "Selecciona una SIM."
+          : "Introduce el ICCID de la nueva SIM."
+      );
+
+      return;
+    }
+
+
+    if (
+      !/^\d{18,22}$/.test(
+        cleanIccid
+      )
+    ) {
+      setAssignError(
+        "El ICCID debe contener entre 18 y 22 dígitos."
       );
 
       return;
@@ -382,7 +530,7 @@ export default function ProvisioningPage() {
         cleanImei,
 
       iccid:
-        iccid.trim() || null,
+        cleanIccid,
 
       course_id:
         selectedCourse,
@@ -470,6 +618,12 @@ export default function ProvisioningPage() {
        */
 
       await loadDevice();
+
+      /*
+       * Recargamos las SIMs disponibles.
+       */
+
+      await loadAvailableSims();
 
 
       /*
@@ -752,7 +906,7 @@ export default function ProvisioningPage() {
 
 
           {/* =================================================
-              ICCID
+              ICCID / SIM
           ================================================= */}
 
           <div className="mt-7">
@@ -760,38 +914,218 @@ export default function ProvisioningPage() {
             <div>
 
               <h3 className="font-semibold text-[#202824]">
-                ICCID
+                SIM / ICCID *
               </h3>
 
               <p className="mt-1 text-xs text-gray-400">
-                Opcional. Identificador de la SIM.
+                Selecciona una SIM ya registrada o añade una nueva.
               </p>
 
             </div>
 
 
-            <input
-              type="text"
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
 
-              value={iccid}
+              <button
+                type="button"
 
-              onChange={(event) => {
-                setIccid(
-                  event.target.value
-                );
+                onClick={() => {
+                  setSimMode("known");
+                  setNewIccid("");
+                  setAssignError("");
+                  setSuccessMessage("");
+                }}
 
-                setAssignError("");
-                setSuccessMessage("");
-              }}
+                disabled={assigning}
 
-              disabled={assigning}
+                className={`rounded-2xl border px-4 py-4 text-left transition ${
+                  simMode === "known"
+                    ? "border-[#32634f] bg-[#edf5f0]"
+                    : "border-[#d9e1d8] bg-white"
+                } disabled:opacity-60`}
+              >
 
-              placeholder="Introduce el ICCID si está disponible"
+                <p className="font-semibold text-[#202824]">
+                  Seleccionar SIM conocida
+                </p>
 
-              autoComplete="off"
+                <p className="mt-1 text-xs text-gray-500">
+                  Elige una SIM disponible del inventario.
+                </p>
 
-              className="mt-3 w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c] outline-none focus:border-[#32634f] disabled:bg-gray-100"
-            />
+              </button>
+
+
+              <button
+                type="button"
+
+                onClick={() => {
+                  setSimMode("new");
+                  setSelectedSim("");
+                  setAssignError("");
+                  setSuccessMessage("");
+                }}
+
+                disabled={assigning}
+
+                className={`rounded-2xl border px-4 py-4 text-left transition ${
+                  simMode === "new"
+                    ? "border-[#32634f] bg-[#edf5f0]"
+                    : "border-[#d9e1d8] bg-white"
+                } disabled:opacity-60`}
+              >
+
+                <p className="font-semibold text-[#202824]">
+                  Añadir nueva SIM
+                </p>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Introduce manualmente un ICCID nuevo.
+                </p>
+
+              </button>
+
+            </div>
+
+
+            {simMode === "known" && (
+
+              <div className="mt-4">
+
+                <select
+                  value={selectedSim}
+
+                  onChange={(event) => {
+                    setSelectedSim(
+                      event.target.value
+                    );
+
+                    setAssignError("");
+                    setSuccessMessage("");
+                  }}
+
+                  disabled={
+                    assigning ||
+                    loadingSims ||
+                    !!simsError ||
+                    selectableSims.length === 0
+                  }
+
+                  className="w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c] outline-none focus:border-[#32634f] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                >
+
+                  <option value="">
+
+                    {loadingSims
+                      ? "Cargando SIMs..."
+                      : selectableSims.length === 0
+                      ? "No hay SIMs disponibles"
+                      : "Selecciona una SIM"}
+
+                  </option>
+
+
+                  {selectableSims.map(
+                    (sim) => (
+
+                      <option
+                        key={sim.iccid}
+                        value={sim.iccid}
+                      >
+
+                        {sim.iccid}
+                        {sim.iccid === currentDeviceIccid
+                          ? " · SIM actual"
+                          : ""}
+
+                      </option>
+
+                    )
+                  )}
+
+                </select>
+
+
+                {simsError && (
+
+                  <p className="mt-2 text-sm text-red-600">
+                    {simsError}
+                  </p>
+
+                )}
+
+
+                {!loadingSims &&
+                  !simsError &&
+                  selectableSims.length === 0 && (
+
+                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+
+                      <p className="font-semibold text-amber-800">
+                        No hay SIMs disponibles
+                      </p>
+
+                      <p className="mt-1 text-sm text-amber-700">
+                        Puedes elegir “Añadir nueva SIM” e introducir su ICCID.
+                      </p>
+
+                    </div>
+
+                )}
+
+              </div>
+
+            )}
+
+
+            {simMode === "new" && (
+
+              <div className="mt-4">
+
+                <input
+                  type="text"
+
+                  value={newIccid}
+
+                  onChange={(event) => {
+                    const value =
+                      event.target.value
+                        .replace(/\D/g, "")
+                        .slice(0, 22);
+
+                    setNewIccid(
+                      value
+                    );
+
+                    setAssignError("");
+                    setSuccessMessage("");
+                  }}
+
+                  disabled={assigning}
+
+                  placeholder="Introduce el ICCID de la nueva SIM"
+
+                  autoComplete="off"
+
+                  className="w-full rounded-2xl border border-[#d9e1d8] bg-white px-4 py-4 text-[#26312c] outline-none focus:border-[#32634f] disabled:bg-gray-100"
+                />
+
+
+                <div className="mt-2 flex items-center justify-between gap-3">
+
+                  <p className="text-xs text-gray-400">
+                    Entre 18 y 22 dígitos.
+                  </p>
+
+                  <p className="text-xs text-gray-400">
+                    {newIccid.length}/22
+                  </p>
+
+                </div>
+
+              </div>
+
+            )}
 
           </div>
 
@@ -1102,6 +1436,7 @@ export default function ProvisioningPage() {
               loadingDevice ||
               !!deviceError ||
               imei.length !== 15 ||
+              !validIccid ||
               !selectedCourse ||
               !selectedCart ||
               !installerName.trim()
