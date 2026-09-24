@@ -4,10 +4,6 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 
-const API_BASE_URL =
-  "https://08m2whbesa.execute-api.us-east-1.amazonaws.com";
-
-
 type Device = {
   device_id?: string;
   thing_name?: string | null;
@@ -143,7 +139,7 @@ export default function ProvisioningPage() {
       setDeviceError("");
 
       const response = await fetch(
-        `${API_BASE_URL}/devices/${deviceId}`
+        `/api/backend/devices/${encodeURIComponent(deviceId)}`
       );
 
       if (!response.ok) {
@@ -205,7 +201,7 @@ export default function ProvisioningPage() {
       setSimsError("");
 
       const response = await fetch(
-        `${API_BASE_URL}/sims/available`
+        `/api/backend/sims/available`
       );
 
       if (!response.ok) {
@@ -255,7 +251,7 @@ export default function ProvisioningPage() {
         setCoursesError("");
 
         const response = await fetch(
-          `${API_BASE_URL}/courses`
+          `/api/backend/courses`
         );
 
         if (!response.ok) {
@@ -309,7 +305,7 @@ export default function ProvisioningPage() {
         setSelectedCart("");
 
         const response = await fetch(
-          `${API_BASE_URL}/courses/${selectedCourse}/carts`
+          `/api/backend/courses/${encodeURIComponent(selectedCourse)}/carts`
         );
 
         if (!response.ok) {
@@ -556,7 +552,7 @@ export default function ProvisioningPage() {
 
 
       const response = await fetch(
-        `${API_BASE_URL}/devices/${deviceId}/assign`,
+        `/api/backend/devices/${encodeURIComponent(deviceId)}/assign`,
         {
           method: "POST",
 
@@ -632,7 +628,7 @@ export default function ProvisioningPage() {
 
       const cartsResponse =
         await fetch(
-          `${API_BASE_URL}/courses/${selectedCourse}/carts`
+          `/api/backend/courses/${encodeURIComponent(selectedCourse)}/carts`
         );
 
 
