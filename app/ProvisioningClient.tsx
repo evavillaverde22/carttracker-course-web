@@ -391,9 +391,18 @@ export default function ProvisioningPage() {
       : newIccid.trim();
 
 
+  /*
+   * Las SIMs conocidas pueden venir del backend con espacios
+   * u otros separadores. Normalizamos el ICCID antes de
+   * validar para que el botón no quede bloqueado.
+   */
+  const cleanFinalIccid =
+    finalIccid.replace(/\D/g, "");
+
+
   const validIccid =
     /^\d{18,22}$/.test(
-      finalIccid
+      cleanFinalIccid
     );
 
 
@@ -507,14 +516,7 @@ export default function ProvisioningPage() {
     // ---------------------------------------------------
     // INSTALLER
     // ---------------------------------------------------
-
-    if (!installerName.trim()) {
-      setAssignError(
-        "Introduce el nombre del instalador."
-      );
-
-      return;
-    }
+    // El nombre del instalador es opcional.
 
 
     // ---------------------------------------------------
@@ -535,7 +537,8 @@ export default function ProvisioningPage() {
         selectedCart,
 
       changed_by:
-        installerName.trim(),
+        installerName.trim() ||
+        "MT700 provisioning",
 
       reason:
         "MT700 pilot QR provisioning",
@@ -1330,11 +1333,11 @@ export default function ProvisioningPage() {
             <div>
 
               <h3 className="font-semibold text-[#202824]">
-                Instalador *
+                Instalador (opcional)
               </h3>
 
               <p className="mt-1 text-xs text-gray-400">
-                Persona que realiza la instalación.
+                Persona que realiza la instalación, si se desea registrar.
               </p>
 
             </div>
@@ -1434,8 +1437,7 @@ export default function ProvisioningPage() {
               imei.length !== 15 ||
               !validIccid ||
               !selectedCourse ||
-              !selectedCart ||
-              !installerName.trim()
+              !selectedCart
             }
 
             className="mt-8 w-full rounded-2xl bg-[#32634f] px-6 py-4 font-semibold text-white transition hover:bg-[#28513f] disabled:cursor-not-allowed disabled:bg-gray-400"
