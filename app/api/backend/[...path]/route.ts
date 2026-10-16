@@ -42,7 +42,7 @@ function isAllowedRoute(
 
   if (
     method === "POST" &&
-    /^devices\/[^/]+\/assign$/.test(path)
+    /^devices\/[^/]+\/(assign|unassign)$/.test(path)
   ) {
     return true;
   }

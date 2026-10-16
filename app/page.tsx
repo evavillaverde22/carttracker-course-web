@@ -12,7 +12,7 @@ export default function HomePage() {
             </h1>
 
             <p className="mt-6 text-sm text-gray-500">
-              Loading device provisioning...
+              Loading GPS assignment...
             </p>
           </div>
         </main>
