@@ -1329,7 +1329,7 @@ export default function ProvisioningPage({
               SUMMARY + MAIN BUTTON (fixed at the bottom)
           ============================================= */}
 
-          <div className="sticky bottom-0 -mx-4 mt-8 border-t border-[#dce5dd] bg-[#f6f8f5]/95 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+          <div className="sticky bottom-0 -mx-4 mt-8 bg-gradient-to-t from-[#e9f0e9] via-[#eef3ee]/90 to-transparent px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-6">
             {summary && (
               <p className="mb-2.5 text-xs leading-5 text-[#4f5f56]">
                 {summary}
@@ -1396,8 +1396,10 @@ function PageShell({
     .join("");
 
   return (
-    <main className="min-h-screen bg-[#f6f8f5]">
-      <header className="sticky top-0 z-30 border-b border-[#e3eae4] bg-[#f6f8f5]/90 backdrop-blur">
+    <main className="relative isolate min-h-screen bg-gradient-to-b from-[#f7f9f6] via-[#f1f5f0] to-[#e6eee6]">
+      <GolfBackdrop />
+
+      <header className="sticky top-0 z-30 border-b border-[#e3eae4]/80 bg-[#f7f9f6]/80 backdrop-blur">
         <div className="mx-auto flex max-w-xl items-center gap-3 px-4 py-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#427460] to-[#234d3c] text-xs font-bold text-white shadow-sm">
             CR
@@ -1466,10 +1468,88 @@ function PageShell({
         </div>
       </header>
 
-      <div className="mx-auto max-w-xl px-4 pb-6 pt-6">{children}</div>
+      <div className="relative z-10 mx-auto max-w-xl px-4 pb-16 pt-6">
+        {children}
+      </div>
 
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
     </main>
+  );
+}
+
+// Soft golf landscape behind the page (hills, trees and a flag), fixed at
+// the bottom of the screen. Drawn in SVG: no image to download. The trees
+// and the flag are placed on their own so they stay visible on phones.
+function GolfBackdrop() {
+  const hill = (d: string, fill: string, opacity: number) => (
+    <svg
+      className="absolute inset-0 h-full w-full"
+      viewBox="0 0 1200 300"
+      preserveAspectRatio="none"
+    >
+      <path d={d} fill={fill} opacity={opacity} />
+    </svg>
+  );
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+    >
+      <div className="absolute -left-24 top-24 h-72 w-72 rounded-full bg-[#dbe9de]/60 blur-3xl" />
+      <div className="absolute -right-20 top-1/3 h-80 w-80 rounded-full bg-[#e2ede4]/70 blur-3xl" />
+
+      <div className="absolute inset-x-0 bottom-0 h-[34vh] min-h-[220px]">
+        {/* far hills */}
+        {hill(
+          "M0 110 C 160 50 300 60 430 95 C 560 130 690 35 860 50 C 1000 62 1100 100 1200 85 L1200 300 L0 300 Z",
+          "#dfe9df",
+          0.75
+        )}
+
+        {/* trees (left) */}
+        <svg
+          className="absolute bottom-[52%] left-[2%] w-[30%] max-w-[230px]"
+          viewBox="0 0 230 110"
+        >
+          <g fill="#c6dacb">
+            <rect x="93" y="46" width="8" height="64" rx="4" />
+            <circle cx="97" cy="34" r="30" />
+            <circle cx="76" cy="52" r="21" />
+            <circle cx="118" cy="50" r="22" />
+            <rect x="171" y="66" width="6" height="44" rx="3" />
+            <circle cx="174" cy="56" r="21" />
+            <circle cx="160" cy="66" r="14" />
+            <rect x="26" y="74" width="5" height="36" rx="2.5" />
+            <circle cx="28" cy="66" r="15" />
+          </g>
+        </svg>
+
+        {/* middle hills */}
+        {hill(
+          "M0 165 C 140 120 280 127 420 153 C 560 179 700 115 880 127 C 1030 137 1120 165 1200 157 L1200 300 L0 300 Z",
+          "#d3e3d6",
+          0.85
+        )}
+
+        {/* flag (right) */}
+        <svg
+          className="absolute bottom-[38%] right-[7%] w-[13%] max-w-[90px]"
+          viewBox="0 0 70 130"
+        >
+          <rect x="22" y="6" width="4" height="116" rx="2" fill="#b3cbb8" />
+          <path d="M26 8 L66 22 L26 36 Z" fill="#a6c2ad" />
+          <ellipse cx="24" cy="124" rx="20" ry="5" fill="#bfd5c4" />
+        </svg>
+
+        {/* near hills */}
+        {hill(
+          "M0 222 C 180 188 330 196 500 214 C 680 232 820 188 1000 196 C 1100 200 1160 216 1200 212 L1200 300 L0 300 Z",
+          "#c8dccc",
+          0.9
+        )}
+      </div>
+    </div>
   );
 }
 
