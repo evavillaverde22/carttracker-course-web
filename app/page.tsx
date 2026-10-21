@@ -1,7 +1,21 @@
 import { Suspense } from "react";
+import { auth0 } from "@/lib/auth0";
 import ProvisioningClient from "./ProvisioningClient";
 
-export default function HomePage() {
+export default async function HomePage() {
+  // proxy.ts already requires login. The user's name / email is shown in
+  // the header and saved as "assigned by" in the assignment history.
+  const session = await auth0.getSession();
+  const user = session?.user;
+
+  const signedInUser =
+    user && (user.name || user.email)
+      ? {
+          name: user.name ?? null,
+          email: user.email ?? null,
+        }
+      : null;
+
   return (
     <Suspense
       fallback={
@@ -18,7 +32,7 @@ export default function HomePage() {
         </main>
       }
     >
-      <ProvisioningClient />
+      <ProvisioningClient signedInUser={signedInUser} />
     </Suspense>
   );
 }
