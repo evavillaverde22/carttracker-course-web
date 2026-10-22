@@ -21,13 +21,6 @@ function isAllowedRoute(
 
   if (
     method === "GET" &&
-    path === "sims/available"
-  ) {
-    return true;
-  }
-
-  if (
-    method === "GET" &&
     path === "courses"
   ) {
     return true;

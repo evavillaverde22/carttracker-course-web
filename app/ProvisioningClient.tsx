@@ -60,15 +60,6 @@ type Cart = {
   available: boolean;
 };
 
-type Sim = {
-  iccid: string;
-  status: string;
-  assigned_device_id: string | null;
-  created_at?: string | null;
-};
-
-type SimMode = "known" | "new";
-
 // Person logged in with Auth0 (read on the server in page.tsx). Their
 // name, or email, is saved as "assigned by" in the assignment history.
 export type SignedInUser = {
@@ -87,6 +78,14 @@ const ASSIGNED_BY_STORAGE_KEY = "courserev.assignedBy";
 function digitsOnly(value: string) {
   return value.replace(/\D/g, "");
 }
+
+// ICCID typed by hand: spaces (e.g. when pasted from a label) are
+// removed; any other character is kept so validation can reject it.
+function normalizeIccid(value: string) {
+  return value.replace(/\s+/g, "");
+}
+
+const ICCID_FORMAT = /^\d{18,22}$/;
 
 async function readErrorMessage(
   response: Response,
@@ -127,7 +126,6 @@ export default function ProvisioningPage({
   const [device, setDevice] = useState<Device | null>(null);
   const [course, setCourse] = useState<Course | null>(null);
   const [carts, setCarts] = useState<Cart[]>([]);
-  const [sims, setSims] = useState<Sim[]>([]);
 
   // ---------------- Form ----------------
   const [assignedBy, setAssignedBy] = useState(
@@ -141,15 +139,11 @@ export default function ProvisioningPage({
   // Device setup (secondary)
   const [setupOpen, setSetupOpen] = useState(false);
   const [imei, setImei] = useState("");
-  const [simMode, setSimMode] = useState<SimMode>("known");
-  const [selectedSim, setSelectedSim] = useState("");
-  const [newIccid, setNewIccid] = useState("");
+  const [iccid, setIccid] = useState("");
 
   // ---------------- Loading ----------------
   const [loadingDevice, setLoadingDevice] = useState(true);
   const [loadingCarts, setLoadingCarts] = useState(false);
-  const [loadingSims, setLoadingSims] = useState(false);
-  const [simsLoaded, setSimsLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingUnassign, setConfirmingUnassign] =
     useState(false);
@@ -157,7 +151,6 @@ export default function ProvisioningPage({
   // ---------------- Messages ----------------
   const [deviceError, setDeviceError] = useState("");
   const [cartsError, setCartsError] = useState("");
-  const [simsError, setSimsError] = useState("");
   const [actionError, setActionError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -194,38 +187,8 @@ export default function ProvisioningPage({
     }
   }
 
-  // =====================================================
-  // LOAD SIMS (only when Device setup is opened)
-  // =====================================================
-
-  const loadAvailableSims = useCallback(async () => {
-    try {
-      setLoadingSims(true);
-      setSimsError("");
-
-      const response = await fetch(`/api/backend/sims/available`);
-
-      if (!response.ok) {
-        throw new Error(
-          `Error ${response.status}: ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-      setSims(data.sims ?? []);
-      setSimsLoaded(true);
-    } catch (error) {
-      console.error("Error loading SIMs:", error);
-      setSimsError("Could not load available SIMs.");
-      setSims([]);
-    } finally {
-      setLoadingSims(false);
-    }
-  }, []);
-
   function openSetup() {
     setSetupOpen(true);
-    if (!simsLoaded && !loadingSims) loadAvailableSims();
   }
 
   function toggleSetup() {
@@ -263,9 +226,7 @@ export default function ProvisioningPage({
 
       setDevice(data);
       setImei(data.imei ?? "");
-      setNewIccid("");
-      setSimMode("known");
-      setSelectedSim(data.iccid ?? "");
+      setIccid(data.iccid ?? "");
 
       return data;
     } catch (error) {
@@ -400,38 +361,21 @@ export default function ProvisioningPage({
 
   // ---------------- Device setup ----------------
 
-  const currentDeviceIccid = device?.iccid ?? "";
-
-  const selectableSims = [
-    ...(currentDeviceIccid
-      ? [
-          {
-            iccid: currentDeviceIccid,
-            status: "assigned",
-            assigned_device_id: deviceId,
-          },
-        ]
-      : []),
-    ...sims.filter((sim) => sim.iccid !== currentDeviceIccid),
-  ];
-
   const cleanImei = digitsOnly(imei);
-  const cleanIccid = digitsOnly(
-    simMode === "known" ? selectedSim : newIccid
-  );
+  const cleanIccid = normalizeIccid(iccid);
 
   // Only sent when changed in Device setup.
   const imeiChanged =
     cleanImei !== "" && cleanImei !== (device?.imei ?? "");
   const iccidChanged =
     cleanIccid !== "" &&
-    cleanIccid !== digitsOnly(device?.iccid ?? "");
+    cleanIccid !== normalizeIccid(device?.iccid ?? "");
   const setupChanged = imeiChanged || iccidChanged;
 
   const imeiInvalid =
     cleanImei !== "" && !/^\d{15}$/.test(cleanImei);
   const iccidInvalid =
-    cleanIccid !== "" && !/^\d{18,22}$/.test(cleanIccid);
+    cleanIccid !== "" && !ICCID_FORMAT.test(cleanIccid);
 
   const hasImei = !!device?.imei || (cleanImei !== "" && !imeiInvalid);
 
@@ -505,7 +449,6 @@ export default function ProvisioningPage({
   async function refreshAfterChange() {
     await loadDevice();
     if (courseId) await loadCarts(courseId);
-    if (simsLoaded) await loadAvailableSims();
   }
 
   function requireAssignedBy() {
@@ -551,7 +494,9 @@ export default function ProvisioningPage({
     }
 
     if (iccidInvalid) {
-      setActionError("ICCID must be between 18 and 22 digits.");
+      setActionError(
+        "ICCID must contain only digits (18 to 22)."
+      );
       openSetup();
       return;
     }
@@ -1087,115 +1032,43 @@ export default function ProvisioningPage({
                     {imei.length}/15
                   </p>
 
-                  {/* SIM */}
-                  <p className="mt-3 text-sm font-semibold text-[#202824]">
-                    SIM / ICCID
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-[#f1f4f1] p-1">
-                    {(["known", "new"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => {
-                          setSimMode(mode);
-                          if (mode === "known") {
-                            setNewIccid("");
-                            setSelectedSim(currentDeviceIccid);
-                          } else {
-                            setSelectedSim("");
-                          }
-                          clearMessages();
-                        }}
-                        disabled={saving}
-                        className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                          simMode === mode
-                            ? "bg-white text-[#32634f] shadow-sm"
-                            : "text-[#66736c]"
-                        }`}
-                      >
-                        {mode === "known" ? "From inventory" : "New SIM"}
-                      </button>
-                    ))}
+                  {/* SIM ICCID (typed by hand) */}
+                  <label className="mt-3 block">
+                    <span className="text-sm font-semibold text-[#202824]">
+                      SIM ICCID
+                    </span>
+                    <span className="mt-0.5 block text-xs text-[#7a857f]">
+                      The 18–22 digits printed on the SIM card installed in
+                      the MT700. Spaces are removed automatically.
+                    </span>
+                    <input
+                      type="text"
+                      value={iccid}
+                      onChange={(event) => {
+                        setIccid(event.target.value.slice(0, 40));
+                        clearMessages();
+                      }}
+                      disabled={saving}
+                      placeholder="18–22 digit ICCID"
+                      autoComplete="off"
+                      inputMode="numeric"
+                      className={`mt-2 ${fieldClass(iccidInvalid)}`}
+                    />
+                  </label>
+                  <div className="mt-1.5 flex justify-between text-xs">
+                    <span
+                      className={
+                        iccidInvalid ? "text-red-600" : "text-[#8a968f]"
+                      }
+                    >
+                      {iccidInvalid
+                        ? "Only digits, 18 to 22."
+                        : "18–22 digits"}
+                    </span>
+                    <span className="text-[#8a968f]">
+                      {cleanIccid.length}/22
+                    </span>
                   </div>
-
-                  {simMode === "known" && (
-                    <div className="mt-3">
-                      <select
-                        value={selectedSim}
-                        onChange={(event) => {
-                          setSelectedSim(event.target.value);
-                          clearMessages();
-                        }}
-                        disabled={
-                          saving ||
-                          loadingSims ||
-                          !!simsError ||
-                          selectableSims.length === 0
-                        }
-                        className={fieldClass(false)}
-                      >
-                        <option value="">
-                          {loadingSims
-                            ? "Loading SIMs…"
-                            : selectableSims.length === 0
-                              ? "No SIMs available"
-                              : "Select a SIM"}
-                        </option>
-                        {selectableSims.map((sim) => (
-                          <option key={sim.iccid} value={sim.iccid}>
-                            {sim.iccid}
-                            {sim.iccid === currentDeviceIccid
-                              ? " · current SIM"
-                              : ""}
-                          </option>
-                        ))}
-                      </select>
-                      {simsError && (
-                        <p className="mt-2 text-sm text-red-600">{simsError}</p>
-                      )}
-                      {!loadingSims &&
-                        !simsError &&
-                        simsLoaded &&
-                        selectableSims.length === 0 && (
-                          <p className="mt-2 text-sm text-amber-700">
-                            No SIMs available. Use “New SIM” to type an
-                            ICCID.
-                          </p>
-                        )}
-                    </div>
-                  )}
-
-                  {simMode === "new" && (
-                    <div className="mt-3">
-                      <input
-                        type="text"
-                        value={newIccid}
-                        onChange={(event) => {
-                          setNewIccid(
-                            digitsOnly(event.target.value).slice(0, 22)
-                          );
-                          clearMessages();
-                        }}
-                        disabled={saving}
-                        placeholder="New SIM ICCID"
-                        autoComplete="off"
-                        inputMode="numeric"
-                        className={fieldClass(iccidInvalid)}
-                      />
-                      <div className="mt-1.5 flex justify-between text-xs">
-                        <span
-                          className={
-                            iccidInvalid ? "text-red-600" : "text-[#8a968f]"
-                          }
-                        >
-                          18–22 digits
-                        </span>
-                        <span className="text-[#8a968f]">
-                          {newIccid.length}/22
-                        </span>
-                      </div>
-                    </div>
-                  )}
 
                   <p className="mt-4 flex gap-2 text-xs leading-5 text-[#7a857f]">
                     <Info size={14} className="mt-0.5 shrink-0" />
